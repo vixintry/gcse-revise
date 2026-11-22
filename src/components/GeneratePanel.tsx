@@ -13,7 +13,7 @@ export function GeneratePanel({ deck, existingFronts, onAdd }: {
 }) {
   const draftKey = `draft:${deck.id}`;
   const [source, setSource] = useState('');
-  const [opts, setOpts] = useState({ count: 12, difficulty: 'medium', detail: 'concise' });
+  const [opts, setOpts] = useState({ count: 'auto', difficulty: 'auto', detail: 'auto' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -46,7 +46,7 @@ export function GeneratePanel({ deck, existingFronts, onAdd }: {
     try {
       const res = await fetch('/api/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal,
-        body: JSON.stringify({ source, subject: deck.subject, examBoard: deck.examBoard, ...opts }),
+        body: JSON.stringify({ source, subject: deck.subject, examBoard: deck.examBoard, difficulty: opts.difficulty, detail: opts.detail, count: opts.count === 'auto' ? 'auto' : Number(opts.count) }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) { setError(data?.error?.message ?? `Card generation failed (${res.status}). You can still add cards by hand.`); return; }
@@ -82,14 +82,14 @@ export function GeneratePanel({ deck, existingFronts, onAdd }: {
         <textarea id="src" value={source} onChange={(e) => setSource(e.target.value)} rows={6} placeholder="Paste a section of your notes or textbook…" />
       </div>
       <div className="row">
-        <div><label htmlFor="cnt">Cards</label><input id="cnt" type="number" min={3} max={30} value={opts.count} onChange={(e) => setOpts({ ...opts, count: Math.min(30, Math.max(3, Number(e.target.value) || 12)) })} style={{ width: 80 }} /></div>
-        <div><label htmlFor="dif">Difficulty</label><select id="dif" value={opts.difficulty} onChange={(e) => setOpts({ ...opts, difficulty: e.target.value })}><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></div>
-        <div><label htmlFor="det">Answer detail</label><select id="det" value={opts.detail} onChange={(e) => setOpts({ ...opts, detail: e.target.value })}><option value="concise">Concise</option><option value="detailed">Detailed</option></select></div>
+        <div><label htmlFor="cnt">Number of cards</label><select id="cnt" value={opts.count} onChange={(e) => setOpts({ ...opts, count: e.target.value })}><option value="auto">Auto (AI decides)</option>{[5, 8, 10, 12, 15, 20, 25, 30].map((n) => <option key={n} value={String(n)}>{n}</option>)}</select></div>
+        <div><label htmlFor="dif">Difficulty</label><select id="dif" value={opts.difficulty} onChange={(e) => setOpts({ ...opts, difficulty: e.target.value })}><option value="auto">Auto (mixed)</option><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></div>
+        <div><label htmlFor="det">Answer detail</label><select id="det" value={opts.detail} onChange={(e) => setOpts({ ...opts, detail: e.target.value })}><option value="auto">Auto (AI decides)</option><option value="concise">Concise</option><option value="detailed">Detailed</option></select></div>
         <div><label htmlFor="file">Or load a .txt / .md file</label><input id="file" type="file" accept=".txt,.md,text/plain,text/markdown" onChange={onFile} /></div>
       </div>
       <div className="row">
         <button className="btn primary" onClick={generate} disabled={busy || source.trim().length < 40}>{busy ? 'Generating…' : 'Generate cards'}</button>
-        <span className="small muted">Cards are checked against your text before you see them. Nothing is saved until you approve it.</span>
+        <span className="small muted">Auto lets the AI choose based on your notes. Cards are checked against your text before you see them, and nothing is saved until you approve it.</span>
       </div>
       {error && <div className="banner err" role="alert">{error}</div>}
       {notice && <div className="banner warn" role="status">{notice}</div>}

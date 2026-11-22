@@ -10,9 +10,9 @@ const Body = z.object({
   source: z.string().max(SOURCE_MAX + 1000),
   subject: z.string().max(60).default(''),
   examBoard: z.string().max(40).default(''),
-  difficulty: z.enum(['easy', 'medium', 'hard']).default('medium'),
-  detail: z.enum(['concise', 'detailed']).default('concise'),
-  count: z.number().int().min(3).max(30).default(12),
+  difficulty: z.enum(['auto', 'easy', 'medium', 'hard']).default('auto'),
+  detail: z.enum(['auto', 'concise', 'detailed']).default('auto'),
+  count: z.union([z.literal('auto'), z.number().int().min(3).max(30)]).default('auto'),
 });
 
 export async function POST(req: Request) {

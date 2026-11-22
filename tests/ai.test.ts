@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AIError, chat, loadConfig, type AIConfig, type Deps } from '@/lib/ai/client';
-import { generateCards, type GenerateOptions } from '@/lib/ai/generate';
+import { AUTO_MAX, buildMessages, generateCards, type GenerateOptions } from '@/lib/ai/generate';
 import { tutor } from '@/lib/ai/tutor';
 
 const config: AIConfig = { apiKey: 'test-key', model: 'm', baseUrl: 'http://x/v1', timeoutMs: 50, maxRetries: 2 };
@@ -152,5 +152,44 @@ describe('tutor', () => {
     await expect(tutor({ mode: 'check', ...card }, config, d)).rejects.toMatchObject({ code: 'invalid_input' });
     await expect(tutor({ mode: 'ask', ...card }, config, d)).rejects.toMatchObject({ code: 'invalid_input' });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('auto options', () => {
+  const userMsg = (o: Partial<GenerateOptions>) => buildMessages(SOURCE, { ...opts, ...o })[1].content;
+
+  it('auto count tells the model to choose, with a cap and no padding', () => {
+    const m = userMsg({ count: 'auto' });
+    expect(m).toMatch(/choose how many the material needs/);
+    expect(m).toMatch(new RegExp(`at most ${AUTO_MAX}`));
+    expect(m).not.toMatch(/Create up to/);
+  });
+
+  it('a chosen count still asks for up to that many', () => {
+    expect(userMsg({ count: 8 })).toMatch(/Create up to 8 cards/);
+  });
+
+  it('auto difficulty and detail let the model choose; manual choices are passed through', () => {
+    expect(userMsg({ difficulty: 'auto', detail: 'auto' })).toMatch(/Difficulty: choose it yourself[\s\S]*Answer detail: choose per card/);
+    expect(userMsg({ difficulty: 'hard', detail: 'detailed' })).toMatch(/Difficulty: hard\. Answer detail: detailed\./);
+  });
+
+  const many = (n: number) => JSON.stringify({
+    cards: Array.from({ length: n }, (_, i) => {
+      const w = String.fromCharCode(97 + Math.floor(i / 26)) + String.fromCharCode(97 + (i % 26));
+      return { front: `Define term${w} precisely please?`, back: 'An answer', source_quote: '', topic: 'x' };
+    }),
+  });
+
+  it('auto accepts up to the cap and no more', async () => {
+    const { d } = deps(ok(many(45)));
+    const r = await generateCards(SOURCE, { ...opts, count: 'auto' }, config, d);
+    expect(r.cards).toHaveLength(AUTO_MAX);
+  });
+
+  it('a numeric count is still a hard cap', async () => {
+    const { d } = deps(ok(many(20)));
+    const r = await generateCards(SOURCE, { ...opts, count: 5 }, config, d);
+    expect(r.cards).toHaveLength(5);
   });
 });

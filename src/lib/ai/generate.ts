@@ -4,13 +4,17 @@ import { validateCards, type CandidateCard, type Rejected } from './validate';
 
 export const SOURCE_MIN = 40;
 export const SOURCE_MAX = 20_000;
+/** Upper limit when the AI chooses the number of cards itself. */
+export const AUTO_MAX = 40;
 
 export interface GenerateOptions {
   subject: string;
   examBoard: string;
-  difficulty: 'easy' | 'medium' | 'hard';
-  detail: 'concise' | 'detailed';
-  count: number;
+  /** 'auto' = the AI chooses */
+  difficulty: 'auto' | 'easy' | 'medium' | 'hard';
+  detail: 'auto' | 'concise' | 'detailed';
+  /** 'auto' = the AI chooses how many cards the material needs (max AUTO_MAX) */
+  count: number | 'auto';
 }
 
 const Response = z.object({ cards: z.array(z.unknown()) });
@@ -50,7 +54,16 @@ export function buildMessages(source: string, o: GenerateOptions): ChatMessage[]
     'Write maths as LaTeX between $...$ and chemical formulae in LaTeX too, e.g. $\\mathrm{H_2O}$.',
     'Output JSON only, matching the schema.',
   ].join('\n');
-  const user = `Subject: ${o.subject || 'not specified'}. Exam board: ${o.examBoard || 'not specified'}. Difficulty: ${o.difficulty}. Answer detail: ${o.detail}. Create up to ${o.count} cards.\n\n<source>\n${source}\n</source>`;
+  const difficulty = o.difficulty === 'auto'
+    ? 'Difficulty: choose it yourself, mixing straightforward recall with some harder "explain why" cards, pitched at GCSE.'
+    : `Difficulty: ${o.difficulty}.`;
+  const detail = o.detail === 'auto'
+    ? 'Answer detail: choose per card. Short for definitions, a few sentences for explain or describe questions, always under 500 characters.'
+    : `Answer detail: ${o.detail}.`;
+  const count = o.count === 'auto'
+    ? `Number of cards: choose how many the material needs. One card per distinct important fact or idea, no padding and no trivial cards, at most ${AUTO_MAX}.`
+    : `Create up to ${o.count} cards.`;
+  const user = `Subject: ${o.subject || 'not specified'}. Exam board: ${o.examBoard || 'not specified'}. ${difficulty} ${detail} ${count}\n\n<source>\n${source}\n</source>`;
   return [{ role: 'system', content: system }, { role: 'user', content: user }];
 }
 
@@ -89,6 +102,6 @@ export async function generateCards(source: string, opts: GenerateOptions, confi
     if (typeof parsed === 'string') throw new AIError('bad_output', `The AI returned unusable output twice (${parsed}). Try less text, or add cards manually.`);
   }
 
-  const { cards, rejected } = validateCards(parsed.cards.slice(0, opts.count), text);
+  const { cards, rejected } = validateCards(parsed.cards.slice(0, opts.count === 'auto' ? AUTO_MAX : opts.count), text);
   return { cards, rejected, repaired };
 }

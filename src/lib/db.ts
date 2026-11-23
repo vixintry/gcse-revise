@@ -7,6 +7,9 @@ export interface Deck {
   subject: string;
   examBoard: string;
   createdAt: number;
+  updatedAt: number;
+  /** 1 = changed locally and not yet confirmed in the cloud */
+  dirty?: 0 | 1;
 }
 export interface CardRec {
   id: string;
@@ -23,6 +26,9 @@ export interface CardRec {
   fsrs: Card;
   /** mirror of fsrs.due in ms, indexed for queries */
   due: number;
+  /** when the schedule (fsrs/due) last changed. Card text and schedule merge independently across devices. */
+  schedAt?: number;
+  dirty?: 0 | 1;
 }
 export interface ReviewRec {
   /** durable, client-generated id: writing the same id twice is a no-op */
@@ -37,6 +43,7 @@ export interface ReviewRec {
   /** true when this rating changed the FSRS schedule */
   committed: boolean;
   prevFsrs?: Card;
+  dirty?: 0 | 1;
 }
 
 export type MisconceptionStatus = 'suspected' | 'confirmed' | 'dismissed' | 'resolved';
@@ -55,6 +62,7 @@ export interface Misconception {
   createdAt: number;
   updatedAt: number;
   resolvedAt?: number;
+  dirty?: 0 | 1;
 }
 /** Short structured learning facts the tutor may use. Always inspectable, editable and deletable. */
 export interface Memory {
@@ -66,7 +74,13 @@ export interface Memory {
   userEdited?: boolean;
   createdAt: number;
   updatedAt: number;
+  dirty?: 0 | 1;
 }
+
+export type SyncTable = 'decks' | 'cards' | 'reviews' | 'misconceptions' | 'memories';
+/** A local deletion waiting to be sent to the cloud. */
+export interface Tombstone { key: string; table: SyncTable; id: string; deletedAt: number }
+export interface MetaRec { key: string; value: unknown }
 
 export class AppDB extends Dexie {
   decks!: Table<Deck, string>;
@@ -74,6 +88,8 @@ export class AppDB extends Dexie {
   reviews!: Table<ReviewRec, string>;
   misconceptions!: Table<Misconception, string>;
   memories!: Table<Memory, string>;
+  tombstones!: Table<Tombstone, string>;
+  meta!: Table<MetaRec, string>;
   constructor(name = 'gcse-revise') {
     super(name);
     this.version(1).stores({
@@ -88,6 +104,15 @@ export class AppDB extends Dexie {
       misconceptions: 'id, deckId, status',
       memories: 'id, topic',
     });
+    this.version(3).stores({
+      decks: 'id, dirty',
+      cards: 'id, deckId, due, dirty',
+      reviews: 'id, cardId, deckId, ts, sessionId, dirty',
+      misconceptions: 'id, deckId, status, dirty',
+      memories: 'id, topic, dirty',
+      tombstones: 'key, table',
+      meta: 'key',
+    }).upgrade((tx) => tx.table('decks').toCollection().modify((d: Deck) => { d.updatedAt ??= d.createdAt; }));
   }
 }
 
